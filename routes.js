@@ -294,6 +294,83 @@ router.post("/verifyEmailUpdate", async (req, res, next) => {
   });
 });
 
+router.post("/verifyEmailUpdateW", async (req, res, next) => {
+  const { email, username, olduser, oldemail } = req.body;
+  console.log(olduser);
+
+  try {
+    // Validar el formato del correo
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).send("Correo inválido");
+    }
+
+    // Verificar si se cambió el usuario
+    if (olduser !== username) {
+      const verifyUser = await User.findOne({ username: username });
+      if (verifyUser) {
+        return res.status(400).send("El usuario ya existe");
+      }
+    }
+    
+    // Verificar si se cambió el correo
+    // if (oldemail !== email) {
+    //   const verifyUserEmail = await User.findOne({ email: email });
+    //   if (verifyUserEmail) {
+    //     return res.status(400).send("El correo ya existe");
+    //   }
+    // }
+    
+    // Verificar si ya se envió un código a este correo
+    const verifyCodeEmail = await Code.findOne({ email: email });
+    if (verifyCodeEmail) {
+      return res.status(400).send("Ya ha sido enviado el correo de verificación a este correo");
+    }
+    
+    // Generar un código aleatorio y preparar la plantilla del correo
+    const codeRandom = Math.floor(Math.random() * 900000) + 100000;
+    const verifyEmailHtml = await updateAccount(username, codeRandom);
+
+    // Crear y guardar el código en la base de datos
+    const code = new Code({
+      email: email,
+      code: codeRandom,
+      createAt: new Date(),
+    });
+    await code.save();
+
+    // Configurar el transporte de nodemailer  
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.USER_EMAIL, // Es recomendable usar variables de entorno
+        pass: process.env.PASSWORD_EMAIL,
+      },
+    });
+
+    const emailOptions = {
+      from: process.env.USER_EMAIL,
+      to: email,
+      subject: "Confirmar dirección de correo electrónico para ConsulToria",
+      html: verifyEmailHtml,
+    };
+
+    transporter.sendMail(emailOptions, (error, info) => {
+      if (error) {
+        console.log("Error al enviar email:", error);
+        return res.status(500).send("Fallo al enviar el correo de verificación");
+      } else {
+        console.log("Correo enviado:", info.response);
+        return res.status(200).send("Correo de verificación enviado con éxito");
+      }
+    });
+  } catch (err) {
+    console.error("Error interno:", err);
+    res.status(500).send("Error interno del servidor");
+  }
+});
+
+
 router.post("/updateAccount", async (req, res) => {
   try {
     const form = new formidable.IncomingForm();
@@ -321,6 +398,56 @@ router.post("/updateAccount", async (req, res) => {
     res.status(500).send("Error al actulizar la cuenta");
   }
 });
+
+router.post("/updateAccountW", async (req, res) => {
+  try {
+    const form = new formidable.IncomingForm();
+
+    form.parse(req, async (err, fields, files) => {
+      if (err) {
+        console.error("Error al parsear el formulario:", err);
+        return res.status(500).send("Error procesando el formulario");
+      }
+
+      // Función auxiliar para extraer el valor del campo
+      const extractValue = (value) => {
+        return Array.isArray(value) ? value[0] : value;
+      };
+
+      // Extraer cada uno de los campos utilizando extractValue
+      const name = extractValue(fields.name);
+      const lastname = extractValue(fields.lastname);
+      const username = extractValue(fields.username);
+      const email = extractValue(fields.email);
+      const password = extractValue(fields.password);
+      const photo = extractValue(fields.photo);
+      const olduser = extractValue(fields.olduser);
+
+      // Buscar el usuario usando el valor extraído de olduser
+      const user = await User.findOne({ username: olduser });
+      // if (!user) {
+      //   return res.status(400).send("El usuario no existe");
+      // }
+
+      // Actualizar los campos del usuario
+      user.name = name;
+      user.lastname = lastname;
+      user.username = username;
+      user.email = email;
+      user.password = await user.encryptPassword(password);
+      user.photo = photo;
+      
+      // Guardar la actualización
+      await user.save();
+
+      return res.status(200).send("Su cuenta ha sido modificada con éxito");
+    });
+  } catch (error) {
+    console.error("Error al actualizar la cuenta:", error);
+    res.status(500).send("Error al actualizar la cuenta");
+  }
+});
+
 
 router.get("/getUsers", async (req, res) => {
   try {
