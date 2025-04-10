@@ -404,49 +404,28 @@ router.post("/updateAccountW", async (req, res) => {
     const form = new formidable.IncomingForm();
 
     form.parse(req, async (err, fields, files) => {
-      if (err) {
-        console.error("Error al parsear el formulario:", err);
-        return res.status(500).send("Error procesando el formulario");
-      }
-
-      // Función auxiliar para extraer el valor del campo
-      const extractValue = (value) => {
-        return Array.isArray(value) ? value[0] : value;
-      };
-
-      // Extraer cada uno de los campos utilizando extractValue
-      const name = extractValue(fields.name);
-      const lastname = extractValue(fields.lastname);
-      const username = extractValue(fields.username);
-      const email = extractValue(fields.email);
-      const password = extractValue(fields.password);
-      const photo = extractValue(fields.photo);
-      const olduser = extractValue(fields.olduser);
-
-      // Buscar el usuario usando el valor extraído de olduser
+      const { name, lastname, username, email, password, photo, olduser } =
+        fields;
       const user = await User.findOne({ username: olduser });
-      // if (!user) {
-      //   return res.status(400).send("El usuario no existe");
-      // }
 
-      // Actualizar los campos del usuario
-      user.name = name;
-      user.lastname = lastname;
-      user.username = username;
-      user.email = email;
-      user.password = await user.encryptPassword(password);
-      user.photo = photo;
-      
-      // Guardar la actualización
-      await user.save();
+      if (!user) {
+        res.status(400).send("El usuario no existe");
+      } else {
+        user.name = name;
+        user.lastname = lastname;
+        user.username = username;
+        user.email = email;
+        user.password = await user.encryptPassword(password);
+        user.photo = photo;
+        await user.save();
 
-      return res.status(200).send("Su cuenta ha sido modificada con éxito");
+        res.status(200).send("Su cuenta ha sido modificada con éxito");
+      }
     });
   } catch (error) {
-    console.error("Error al actualizar la cuenta:", error);
-    res.status(500).send("Error al actualizar la cuenta");
+    res.status(500).send("Error al actulizar la cuenta");
   }
-});
+    });
 
 
 router.get("/getUsers", async (req, res) => {
